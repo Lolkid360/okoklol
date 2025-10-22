@@ -1,6 +1,5 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
   "/page": "app/page.js",
-  "/api/fetch-images/route": "app/api/fetch-images/route.js",
+  "/api/fetch-images/proxy/route": "app/api/fetch-images/proxy/route.js",
   "/api/translate/route": "app/api/translate/route.js"
 }

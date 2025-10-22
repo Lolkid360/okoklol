@@ -39,7 +39,7 @@ export default function UrlInput({ onFetch, onLoading }: Props) {
 
   return (
     <div className="p-5 border border-gray-200 rounded-lg shadow-sm bg-white">
-      <label className="block mb-3 font-medium text-gray-800">Chapter URL</label>
+      <label className="block mb-3 font-medium text-black">Chapter URL</label>
       <div className="flex gap-3">
         <input
           type="url"

@@ -56,20 +56,19 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
       const worker = await createWorker('kor+jpn+eng')
       
       console.log('Processing image with OCR...')
-      const ret = await worker.recognize(imageSource)
+      const { data: { words } } = await worker.recognize(imageSource)
       console.log('OCR processing complete')
       
       const boundingBoxes: BoundingBox[] = []
-      const words = ret.data.words || []
-      
       for (const word of words) {
-        if (word.text.trim() && word.confidence > 30) {
+        const text = word.text.trim()
+        if (text && word.confidence > 40 && /[a-zA-Z\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7A3]/.test(text)) {
           boundingBoxes.push({
             x: word.bbox.x0,
             y: word.bbox.y0,
             width: word.bbox.x1 - word.bbox.x0,
             height: word.bbox.y1 - word.bbox.y0,
-            text: word.text
+            text: text.replace(/\n/g, ' ')
           })
         }
       }
@@ -121,7 +120,7 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
 
       await worker.terminate()
       
-      const translatedFullText = boundingBoxes.map(b => b.translatedText || b.text).join(' ')
+      const translatedFullText = boundingBoxes.map(b => b.translatedText || b.text).join('\n')
 
       onResult({ 
         text: translatedFullText || 'No text detected', 
@@ -152,7 +151,7 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
   return (
     <div className="relative">
       <label className="flex items-center gap-2">
-        <span className="text-gray-800">Upload image</span>
+        <span className="text-black">Upload image</span>
         {isProcessing && (
           <span className="text-blue-600 animate-pulse">(Processing...)</span>
         )}
@@ -160,10 +159,10 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
       <div className="mt-2">
         <label className="flex justify-center w-full h-32 px-4 transition border-2 border-gray-300 border-dashed rounded-lg appearance-none cursor-pointer hover:border-blue-500 focus:outline-none">
           <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <p className="pt-1 text-sm text-gray-600">
+            <p className="pt-1 text-sm text-black">
               Drop an image or click to select
             </p>
           </div>

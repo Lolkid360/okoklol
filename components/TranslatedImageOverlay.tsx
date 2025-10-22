@@ -43,36 +43,53 @@ export default function TranslatedImageOverlay({ imageUrl, boundingBoxes, showOr
         // Overlay translated text
         boundingBoxes.forEach(box => {
           if (box.translatedText) {
-            // Fill the original text area with white to mask it
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-            ctx.fillRect(box.x, box.y, box.width, box.height)
-
-            // Draw translated text
             const fontSize = Math.max(12, Math.min(box.height * 0.7, 24))
             ctx.font = `${fontSize}px Arial, sans-serif`
-            ctx.fillStyle = 'black'
             ctx.textBaseline = 'top'
 
-            // Word wrap the text if it's too long
+            // Calculate the dimensions of the translated text
             const words = box.translatedText.split(' ')
             let line = ''
-            let yOffset = box.y + 2
-            const lineHeight = fontSize * 1.2
-            const maxWidth = box.width - 4
-
+            const lines = []
+            const maxWidth = box.width - 4 // Use original box width as a constraint
+            
             for (let i = 0; i < words.length; i++) {
-              const testLine = line + words[i] + ' '
-              const metrics = ctx.measureText(testLine)
-              
-              if (metrics.width > maxWidth && i > 0) {
-                ctx.fillText(line, box.x + 2, yOffset)
-                line = words[i] + ' '
-                yOffset += lineHeight
-              } else {
-                line = testLine
-              }
+                const testLine = line + words[i] + ' '
+                const metrics = ctx.measureText(testLine)
+                if (metrics.width > maxWidth && i > 0) {
+                    lines.push(line)
+                    line = words[i] + ' '
+                } else {
+                    line = testLine
+                }
             }
-            ctx.fillText(line, box.x + 2, yOffset)
+            lines.push(line)
+
+            let translatedWidth = 0;
+            for (const l of lines) {
+                const lineWidth = ctx.measureText(l.trim()).width;
+                if (lineWidth > translatedWidth) {
+                    translatedWidth = lineWidth;
+                }
+            }
+
+            const lineHeight = fontSize * 1.2
+            const translatedHeight = lines.length * lineHeight
+
+            // Fill the original text area with white to mask it
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+            // center the new box
+            const newX = box.x + (box.width - translatedWidth) / 2
+            const newY = box.y + (box.height - translatedHeight) / 2
+            ctx.fillRect(newX - 2, newY - 2, translatedWidth + 4, translatedHeight + 4)
+
+            // Draw translated text
+            ctx.fillStyle = 'black'
+            let yOffset = newY;
+            for (const l of lines) {
+              ctx.fillText(l.trim(), newX, yOffset)
+              yOffset += lineHeight
+            }
           }
         })
       }
@@ -95,7 +112,7 @@ export default function TranslatedImageOverlay({ imageUrl, boundingBoxes, showOr
         style={{ display: imageLoaded ? 'block' : 'none' }}
       />
       {!imageLoaded && (
-        <div className="text-gray-500">Loading image...</div>
+        <div className="text-black">Loading image...</div>
       )}
     </div>
   )
