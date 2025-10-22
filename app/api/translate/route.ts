@@ -1,69 +1,87 @@
 import { NextResponse } from 'next/server'
-import OpenAI from 'openai'
-
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export async function POST(request: Request) {
   try {
-    const { text, sourceLang, isBatch, count } = await request.json()
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: 'Server configuration error: Missing API key.' },
+        { status: 500 }
+      );
+    }
 
+    const { text, isBatch } = await request.json()
     if (!text) {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 })
     }
 
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' })
+
     if (isBatch) {
-      // Batch translation - text contains numbered entries like "[0] text\n[1] text\n..."
-      const response = await openai.chat.completions.create({
-        model: 'gpt-5',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a professional translator specializing in manga and webtoon translation. The input contains numbered text entries in the format "[index] text". Translate each entry to English, preserving the tone, style, and cultural context. Keep translations natural and readable. Respond with a JSON array of objects with "index" and "text" fields.'
-          },
-          {
-            role: 'user',
-            content: `Translate these ${sourceLang || 'text'} entries to English. Maintain the index numbers and return as JSON:\n\n${text}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-        max_completion_tokens: 4096
-      })
+      const prompt = `
+        You are a professional translator specializing in translating Japanese and Korean text from manga and webtoons into natural-sounding English.
 
-      const result = JSON.parse(response.choices[0].message.content || '{}')
+        The user has provided a list of text blocks, each with an index number. Your task is to translate each text block to English.
+
+        **Instructions:**
+        1.  Read the input, which is a series of lines formatted as \`[index] text\`.
+        2.  Translate the text for each index into English.
+        3.  Preserve the original tone, style, and cultural nuances.
+        4.  If a text block cannot be translated or is not in a translatable language, return the original text for that block.
+        5.  Respond with a single JSON object with one key: \`"translations"\`.
+        6.  The value of \`"translations"\` must be a JSON array of objects, where each object has two keys: \`"index"\` (number) and \`"text"\` (string).
+
+        **Example Input:**
+        [0] 안녕하세요
+        [1] これはテストです
+
+        **Example JSON Output:**
+        {
+          "translations": [
+            { "index": 0, "text": "Hello" },
+            { "index": 1, "text": "This is a test" }
+          ]
+        }
+
+        **Translate the following text blocks:**
+        ${text}
+      `
+
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      let responseText = response.text()
+
+      // Clean up the response to ensure it's valid JSON
+      if (responseText.startsWith("```json")) {
+        responseText = responseText.substring(7, responseText.length - 3).trim();
+      } else if (responseText.startsWith("```")) {
+        responseText = responseText.substring(3, responseText.length - 3).trim();
+      }
       
-      return NextResponse.json({ 
-        translations: result.translations || [],
-        originalText: text,
-        sourceLang 
-      })
+      try {
+        const jsonOutput = JSON.parse(responseText);
+        return NextResponse.json(jsonOutput);
+      } catch (e) {
+        console.error("Failed to parse JSON from Gemini response:", responseText);
+        // If parsing fails, attempt to return a valid-like structure with an error message
+        return NextResponse.json(
+          { error: 'Translation failed: Invalid format from translation service.', details: responseText },
+          { status: 500 }
+        );
+      }
+
     } else {
-      // Single translation
-      const response = await openai.chat.completions.create({
-        model: 'gpt-5',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a professional translator specializing in manga and webtoon translation. Translate the provided text to English, preserving the tone, style, and cultural context. Keep translations natural and readable.'
-          },
-          {
-            role: 'user',
-            content: `Translate this ${sourceLang || 'text'} to English: ${text}`
-          }
-        ],
-        max_completion_tokens: 500
-      })
+      const prompt = `Translate the following text to English, keeping the translation natural and preserving the tone: ${text}`
+      
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const translatedText = response.text()
 
-      const translatedText = response.choices[0].message.content || text
-
-      return NextResponse.json({ 
-        translatedText,
-        originalText: text,
-        sourceLang 
-      })
+      return NextResponse.json({ translatedText })
     }
   } catch (error: any) {
-    console.error('Translation error:', error)
+    console.error('Translation API error:', error)
     return NextResponse.json(
       { error: 'Translation failed', details: error.message },
       { status: 500 }

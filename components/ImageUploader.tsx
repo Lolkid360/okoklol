@@ -31,7 +31,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
     onResult({ text: 'Starting...', language: 'auto', isLoading: true })
 
     try {
-      // If source is a URL, fetch it first to handle CORS
       let imageSource = source
       let imageBlobUrl = ''
       
@@ -53,7 +52,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
       onResult({ text: 'Loading OCR engine...', language: 'auto', isLoading: true })
       const { createWorker } = await import('tesseract.js')
       
-      // Use Korean + Japanese + English for comprehensive detection
       console.log('Creating multi-language Tesseract worker...')
       const worker = await createWorker('kor+jpn+eng')
       
@@ -61,7 +59,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
       const ret = await worker.recognize(imageSource)
       console.log('OCR processing complete')
       
-      // Extract bounding boxes with text
       const boundingBoxes: BoundingBox[] = []
       const words = ret.data.words || []
       
@@ -79,7 +76,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
 
       console.log(`Detected ${boundingBoxes.length} text regions`)
 
-      // Batch translate all text in a single API call
       if (boundingBoxes.length > 0) {
         onResult({ 
           text: `Translating ${boundingBoxes.length} text regions...`, 
@@ -90,7 +86,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
         })
 
         try {
-          // Combine all text with markers to maintain mapping
           const combinedText = boundingBoxes.map((box, i) => `[${i}] ${box.text}`).join('\n')
           
           const response = await fetch('/api/translate', {
@@ -98,31 +93,26 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               text: combinedText,
-              sourceLang: 'Korean/Japanese',
               isBatch: true,
-              count: boundingBoxes.length
             })
           })
 
           if (response.ok) {
-            const data = await response.json()
-            const translations = data.translations || []
-            
-            // Map translations back to bounding boxes
-            translations.forEach((translation: any) => {
-              if (translation.index >= 0 && translation.index < boundingBoxes.length) {
-                boundingBoxes[translation.index].translatedText = translation.text
-              }
-            })
+            const data = await response.json();
+            const translations = data.translations || [];
+            const translationMap = new Map(translations.map((t: any) => [t.index, t.text]));
+
+            boundingBoxes.forEach((box, i) => {
+              const translated = translationMap.get(i);
+              box.translatedText = translated && translated.trim() ? translated : box.text;
+            });
           } else {
-            // Fallback to original text
             boundingBoxes.forEach(box => {
               box.translatedText = box.text
             })
           }
         } catch (err) {
           console.error('Translation error:', err)
-          // Fallback to original text
           boundingBoxes.forEach(box => {
             box.translatedText = box.text
           })
@@ -131,7 +121,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
 
       await worker.terminate()
       
-      const fullText = boundingBoxes.map(b => b.text).join(' ')
       const translatedFullText = boundingBoxes.map(b => b.translatedText || b.text).join(' ')
 
       onResult({ 
@@ -145,7 +134,7 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
     } catch (err: any) {
       console.error('Image processing error:', err)
       onResult({ 
-        text: `Error: ${err?.message || 'Unknown error'}`, 
+        text: `Error: ${err?.message || 'Unknown error'}`,
         language: 'eng',
         isLoading: false
       })
@@ -154,7 +143,6 @@ export default function ImageUploader({ onSelect, onResult, imageUrl }: Props) {
     }
   }
 
-  // Process imageUrl when it changes
   useEffect(() => {
     if (imageUrl) {
       processImage(imageUrl)
